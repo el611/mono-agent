@@ -27,7 +27,7 @@
       "id": "parse_keywords",
       "type": "update_progress",
       "set": {
-        "keywords": "{{keyword}}"
+        "keywords": ["{{keyword}}"]
       }
     },
     {
@@ -63,7 +63,11 @@
     {
       "id": "extract_tweet_data",
       "type": "extract_multiple",
-      "configKey": "tweets",
+      "selector": "article[data-testid='tweet']",
+      "alternatives": [
+        "//article[@data-testid='tweet']",
+        "tweets"
+      ],
       "onSuccess": {
         "action": "save_data"
       }

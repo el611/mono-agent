@@ -27,7 +27,7 @@
       "id": "parse_keywords",
       "type": "update_progress",
       "set": {
-        "keywords": "{{keyword}}"
+        "keywords": ["{{keyword}}"]
       }
     },
     {

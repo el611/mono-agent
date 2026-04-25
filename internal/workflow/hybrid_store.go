@@ -116,11 +116,55 @@ func (h *HybridWorkflowStore) SetWorkflowActive(ctx context.Context, id string, 
 // ---------------------------------------------------------------------------
 
 func (h *HybridWorkflowStore) SaveWorkflowNodes(ctx context.Context, workflowID string, nodes []WorkflowNode) error {
-	return h.sql.SaveWorkflowNodes(ctx, workflowID, nodes)
+	h.ensureSQLiteStub(ctx, workflowID)
+	if err := h.sql.SaveWorkflowNodes(ctx, workflowID, nodes); err != nil {
+		return err
+	}
+	// Sync nodes into the file store so GetWorkflow returns the full picture.
+	h.syncToFileStore(ctx, workflowID)
+	return nil
 }
 
 func (h *HybridWorkflowStore) SaveWorkflowConnections(ctx context.Context, workflowID string, conns []WorkflowConnection) error {
-	return h.sql.SaveWorkflowConnections(ctx, workflowID, conns)
+	h.ensureSQLiteStub(ctx, workflowID)
+	if err := h.sql.SaveWorkflowConnections(ctx, workflowID, conns); err != nil {
+		return err
+	}
+	h.syncToFileStore(ctx, workflowID)
+	return nil
+}
+
+// syncToFileStore reads the full workflow from SQLite and writes it to the file store,
+// keeping nodes and connections in sync across both stores.
+func (h *HybridWorkflowStore) syncToFileStore(ctx context.Context, workflowID string) {
+	if h.files == nil {
+		return
+	}
+	full, err := h.sql.GetWorkflow(ctx, workflowID)
+	if err != nil || full == nil {
+		return
+	}
+	_ = h.files.SaveWorkflow(ctx, full)
+}
+
+// ensureSQLiteStub mirrors a file-store workflow into SQLite if it doesn't
+// exist there yet, satisfying FK constraints for nodes/connections/executions.
+func (h *HybridWorkflowStore) ensureSQLiteStub(ctx context.Context, workflowID string) {
+	if h.files == nil {
+		return
+	}
+	existing, err := h.sql.GetWorkflow(ctx, workflowID)
+	if err == nil && existing != nil {
+		return // already in SQLite
+	}
+	wf, ferr := h.files.GetWorkflow(ctx, workflowID)
+	if ferr != nil || wf == nil {
+		return
+	}
+	stub := *wf
+	stub.Nodes = nil
+	stub.Connections = nil
+	_ = h.sql.CreateWorkflow(ctx, &stub)
 }
 
 // ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 {
   "actionType": "publish_post",
   "platform": "X",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Publish content (tweet) to X (Twitter)",
   "metadata": {
     "requiresAuth": true,
@@ -13,8 +13,7 @@
       "text"
     ],
     "optional": [
-      "media",
-      "locationTag"
+      "media"
     ]
   },
   "outputs": {
@@ -30,10 +29,25 @@
       "timeout": 30
     },
     {
+      "id": "wait_for_page",
+      "type": "wait",
+      "duration": 2.0,
+      "waitFor": "time"
+    },
+    {
       "id": "find_tweet_input",
       "type": "find_element",
-      "xpath": "//div[@contenteditable='true' and @data-testid='tweetTextarea_0'] | //div[@role='textbox']",
+      "selector": "div[data-testid='tweetTextarea_0']",
+      "alternatives": [
+        "//div[@contenteditable='true' and @data-testid='tweetTextarea_0']",
+        "div[role='textbox']"
+      ],
       "timeout": 15
+    },
+    {
+      "id": "click_input",
+      "type": "click",
+      "elementRef": "find_tweet_input"
     },
     {
       "id": "type_tweet",
@@ -43,39 +57,32 @@
       "humanLike": true
     },
     {
-      "id": "check_has_media",
-      "type": "condition",
-      "condition": "media.length > 0",
-      "then": [
-        "upload_media"
-      ],
-      "else": []
-    },
-    {
-      "id": "upload_media",
-      "type": "find_element",
-      "xpath": "//input[@type='file'] | //button[contains(@aria-label, 'Media')]",
-      "timeout": 10
-    },
-    {
-      "id": "click_upload",
-      "type": "click",
-      "elementRef": "upload_media"
+      "id": "wait_after_type",
+      "type": "wait",
+      "duration": 1.5,
+      "waitFor": "time"
     },
     {
       "id": "find_tweet_button",
       "type": "find_element",
-      "xpath": "//button[@data-testid='tweetButton'] | //button[contains(text(), 'Post')]",
+      "selector": "button[data-testid='tweetButtonInline']",
+      "alternatives": [
+        "button[data-testid='tweetButton']",
+        "//button[@data-testid='tweetButtonInline']",
+        "//button[@data-testid='tweetButton']"
+      ],
       "timeout": 10
     },
     {
       "id": "click_tweet",
       "type": "click",
-      "elementRef": "find_tweet_button",
-      "waitFor": "tweet_posted",
-      "onSuccess": {
-        "action": "update_progress"
-      }
+      "elementRef": "find_tweet_button"
+    },
+    {
+      "id": "wait_after_post",
+      "type": "wait",
+      "duration": 3.0,
+      "waitFor": "time"
     }
   ],
   "errorHandling": {

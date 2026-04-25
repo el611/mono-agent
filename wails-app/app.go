@@ -2598,6 +2598,32 @@ func (a *App) ConnectPlatformOAuth(platformID string) string {
 }
 
 // findSystemChrome returns the path to the user's real Chrome browser.
+// extractUsernameFromPage attempts to extract a username from the page DOM.
+func extractUsernameFromPage(page *rod.Page) string {
+	selectors := []string{
+		"div[data-testid='SideNav_AccountSwitcher_Button']",
+		"button[data-testid='SideNav_AccountSwitcher_Button']",
+	}
+	for _, sel := range selectors {
+		el, err := page.Timeout(3 * time.Second).Element(sel)
+		if err != nil || el == nil {
+			continue
+		}
+		text := ""
+		rod.Try(func() { text = el.MustText() })
+		if text == "" {
+			continue
+		}
+		for _, line := range strings.Split(text, "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "@") && len(line) > 1 {
+				return strings.TrimPrefix(line, "@")
+			}
+		}
+	}
+	return ""
+}
+
 func findSystemChrome() string {
 	paths := []string{
 		"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -2708,6 +2734,9 @@ func (a *App) LoginSocial(platform string) string {
 						return
 					}
 					username := adapter.ExtractUsername(page.MustInfo().URL)
+					if username == "" {
+						username = extractUsernameFromPage(page)
+					}
 					if username == "" {
 						username = "unknown"
 					}

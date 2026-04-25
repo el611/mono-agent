@@ -25,6 +25,35 @@ import (
 	_ "github.com/nokhodian/mono-agent/internal/bot/x"
 )
 
+// extractUsernameFromPage attempts to extract a username from the page DOM.
+// Used when the URL doesn't contain the username (e.g. X redirects to /home).
+func extractUsernameFromPage(page *rod.Page) string {
+	// X: the account switcher button contains @username text.
+	selectors := []string{
+		"div[data-testid='SideNav_AccountSwitcher_Button']",
+		"button[data-testid='SideNav_AccountSwitcher_Button']",
+	}
+	for _, sel := range selectors {
+		el, err := page.Timeout(3 * time.Second).Element(sel)
+		if err != nil || el == nil {
+			continue
+		}
+		text := ""
+		rod.Try(func() { text = el.MustText() })
+		if text == "" {
+			continue
+		}
+		// Look for @username in the text.
+		for _, line := range strings.Split(text, "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "@") && len(line) > 1 {
+				return strings.TrimPrefix(line, "@")
+			}
+		}
+	}
+	return ""
+}
+
 // findSystemChrome returns the path to the user's real Chrome/Chromium browser.
 // Falls back to empty string (Rod default) if none found.
 func findSystemChrome() string {
@@ -141,6 +170,11 @@ func newLoginCmd(cfg *globalConfig) *cobra.Command {
 						}
 
 						username := adapter.ExtractUsername(page.MustInfo().URL)
+						if username == "" {
+							// For platforms like X where the URL after login is /home,
+							// try to extract the username from the page DOM.
+							username = extractUsernameFromPage(page)
+						}
 						if username == "" {
 							username = "unknown"
 						}

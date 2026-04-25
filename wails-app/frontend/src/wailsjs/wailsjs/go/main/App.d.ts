@@ -139,6 +139,8 @@ export function TestAIProvider(arg1:string):Promise<string>;
 
 export function TestConnection(arg1:string):Promise<string>;
 
+export function TestSession(arg1:number):Promise<string>;
+
 export function UpdateActionParams(arg1:string,arg2:Record<string, any>):Promise<void>;
 
 export function UpdateActionState(arg1:string,arg2:string):Promise<void>;

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -216,18 +217,35 @@ func refreshOAuthTokenCLI(ctx context.Context, store *connections.Store, conn *c
 
 // cliSessionProvider launches a headed browser and restores session cookies from the DB.
 type cliSessionProvider struct {
-	db      *sql.DB
-	browser *rod.Browser
+	db              *sql.DB
+	browser         *rod.Browser
+	useSystemChrome bool
 }
 
 func (sp *cliSessionProvider) GetPage(ctx context.Context, platform string, username string) (*rod.Page, error) {
 	if sp.browser == nil {
+		// Use system Chrome with a dedicated profile to avoid bot detection.
+		chromePath := findSystemChrome()
+		home, _ := os.UserHomeDir()
+		userDataDir := filepath.Join(home, ".monoes", "chrome-profile")
 		launchURL, err := launcher.New().
+			Bin(chromePath).
+			UserDataDir(userDataDir).
 			Headless(false).
 			Set("disable-blink-features", "AutomationControlled").
+			Set("excludeSwitches", "enable-automation").
 			Launch()
 		if err != nil {
-			return nil, fmt.Errorf("launch browser: %w", err)
+			// Fallback to built-in Chromium.
+			launchURL, err = launcher.New().
+				Headless(false).
+				Set("disable-blink-features", "AutomationControlled").
+				Launch()
+			if err != nil {
+				return nil, fmt.Errorf("launch browser: %w", err)
+			}
+		} else {
+			sp.useSystemChrome = true
 		}
 		sp.browser = rod.New().ControlURL(launchURL)
 		if err := sp.browser.Connect(); err != nil {
@@ -240,8 +258,14 @@ func (sp *cliSessionProvider) GetPage(ctx context.Context, platform string, user
 		return nil, fmt.Errorf("create page: %w", err)
 	}
 
-	// Restore session cookies from DB.
-	if sp.db != nil {
+	// When using system Chrome, the user's real browser session is already
+	// authenticated. Skip CDP cookie injection — it can conflict with
+	// Chrome's native cookie store and break sessions on platforms like
+	// TikTok that use encrypted/HttpOnly cookies.
+	if sp.useSystemChrome {
+		fmt.Fprintf(os.Stderr, "  Using Chrome's native %s session (no CDP cookie injection)\n", platform)
+	} else if sp.db != nil {
+		// Fallback: inject cookies from DB when not using system Chrome.
 		var cookiesJSON string
 		qErr := sp.db.QueryRow(
 			"SELECT cookies_json FROM crawler_sessions WHERE platform = ? ORDER BY expiry DESC LIMIT 1",

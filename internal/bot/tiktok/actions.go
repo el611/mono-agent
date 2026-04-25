@@ -128,7 +128,11 @@ func (b *TikTokBot) LikeVideo(ctx context.Context, page *rod.Page, videoURL stri
 	}
 	time.Sleep(3 * time.Second)
 
+	// The like icon is a SPAN inside a BUTTON. We must click the BUTTON
+	// for TikTok's React event handler to fire.
 	likeSelectors := []string{
+		"button[aria-label='Like video']",
+		"button[aria-label='like video']",
 		"[data-e2e='like-icon']",
 		"[data-e2e='browse-like-button']",
 	}
@@ -145,9 +149,21 @@ func (b *TikTokBot) LikeVideo(ctx context.Context, page *rod.Page, videoURL stri
 		return fmt.Errorf("tiktok: like button not found on %s", videoURL)
 	}
 
-	// Check if already liked (aria-pressed="true").
-	pressed, _ := likeBtn.Attribute("aria-pressed")
-	if pressed != nil && *pressed == "true" {
+	// If we matched a SPAN (data-e2e), walk up to the parent BUTTON.
+	tag, _ := likeBtn.Eval(`() => this.tagName`)
+	if tag != nil && tag.Value.String() != "BUTTON" {
+		parent, pErr := likeBtn.Parent()
+		if pErr == nil && parent != nil {
+			pTag, _ := parent.Eval(`() => this.tagName`)
+			if pTag != nil && pTag.Value.String() == "BUTTON" {
+				likeBtn = parent
+			}
+		}
+	}
+
+	// Check if already liked (aria-label changes to "Unlike video").
+	ariaLabel, _ := likeBtn.Attribute("aria-label")
+	if ariaLabel != nil && strings.Contains(strings.ToLower(*ariaLabel), "unlike") {
 		return nil // already liked
 	}
 
